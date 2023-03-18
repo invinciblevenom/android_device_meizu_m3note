@@ -1,0 +1,2143 @@
+# MTK platform .rc configure
+
+import init.connectivity.rc
+import init.project.rc
+import /FWUpgradeInit.rc
+import init.aee.rc
+import init.fon.rc
+import init.rilproxy.rc
+import init.volte.rc
+import init.mal.rc
+import init.epdg.rc
+import init.wfca.rc
+import init.trustonic.rc
+import init.zygote_on_demand.rc
+import init.common_svc.rc
+import init.microtrust.rc
+import init.chiptest.rc
+# init.modem.rc must be the LAST rc file because vold.post_fs_data_done is set in it
+import init.modem.rc
+# *** DO NOT import the new rc file after this line ***
+
+on early-init
+    write /proc/ppm/policy/userlimit_min_cpu_freq "1 1508000"
+    write /proc/ppm/policy/userlimit_min_cpu_core "1 1"
+    write /proc/bootprof "INIT:early-init"
+    mount debugfs debugfs /sys/kernel/debug
+    chmod 0755 /sys/kernel/debug
+    setprop ro.support.rpmb 1
+
+on init
+    # Support legacy paths
+    symlink /sdcard /mnt/sdcard
+
+    # if primary storage is physical, set ro.vold.primary_physical to 1
+    # setprop ro.vold.primary_physical 1
+
+# Temp Backward compatibility
+    mkdir /protect_f 0771 system system
+    mkdir /protect_s 0771 system system
+    mkdir /nvcfg 0771 system system
+#Create nvdata mount point
+    mkdir /nvdata 0771 system system
+#power_mode
+    chmod 0660 /sys/power/power_mode
+    chown system system /sys/power/power_mode	
+#fsrs
+    chmod 0660 /sys/srs/srs_enable
+    chmod 0660 /sys/srs/srs_debug
+    chmod 0660 /sys/srs/srs_buslevel
+    chmod 0660 /sys/srs/srs_iolevel
+    chmod 0660 /sys/srs/srs_memlevel
+    chmod 0660 /sys/srs/srs_cpulevel
+    chmod 0660 /sys/srs/srs_gpulevel
+    chown system system /sys/srs/srs_enable
+    chown system system /sys/srs/srs_debug
+    chown system system /sys/srs/srs_buslevel
+    chown system system /sys/srs/srs_iolevel
+    chown system system /sys/srs/srs_memlevel
+    chown system system /sys/srs/srs_cpulevel
+    chown system system /sys/srs/srs_gpulevel
+# Create CIP mount point
+    mkdir /custom
+
+    mkdir /mnt/cd-rom 0000 system system
+
+# change lk_env permission
+    chown root system /proc/lk_env
+    chmod 0660 /proc/lk_env
+    chmod 0666 /dev/kmsg
+
+# increase sysctl_rmem_max and sysctl_wmem_max values to 2M
+    write /proc/sys/net/core/wmem_max 8388608
+    write /proc/sys/net/core/rmem_max 8388608
+
+on late-init
+    write /proc/bootprof "INIT:late-init"
+
+# mount different fs start
+
+on property:persist.mediatek.fg.disable=1
+    write /sys/devices/platform/battery_meter/FG_daemon_disable 1
+
+on property:persist.mediatek.fg.force25c=1
+    write /sys/devices/platform/battery_meter/FG_drv_force25c 1
+
+on property:persist.mediatek.fg.force25c=0
+    write /sys/devices/platform/battery_meter/FG_drv_force25c 0
+
+on property:persist.mediatek.fg.log.enable=1
+		chmod 0666 /dev/kmsg
+    write /sys/devices/platform/battery_meter/FG_daemon_log_level 7
+    write /proc/sys/kernel/printk 8
+
+on charger
+    mount ext4 /dev/block/platform/mtk-msdc.0/11230000.msdc0/by-name/system /system ro wait
+    chmod 0660 /dev/spm
+    chown system system /dev/spm
+    start spm_script
+		chmod 0666 /dev/kmsg
+		write /sys/devices/platform/battery_meter/FG_daemon_log_level 7
+    start fuelgauged
+    start kpoc_charger
+    start servicemanager
+
+on fs
+    write /proc/bootprof "INIT:Mount_START"
+    write /sys/kernel/debug/tracing/trace_marker "B|1|Mount"
+    mount_all /fstab.mt6755
+    exec /system/bin/tune2fs -O has_journal -u 10010 -r 4096 /dev/block/platform/mtk-msdc.0/11230000.msdc0/by-name/userdata
+    write /sys/kernel/debug/tracing/trace_marker "E"
+    write /proc/bootprof "INIT:Mount_END"
+
+on fs
+
+   mount iso9660 loop@/vendor/etc/iAmCdRom.iso /mnt/cd-rom ro
+
+on post-fs
+    write /proc/bootprof "INIT:post-fs"
+    # Support legacy paths
+    symlink /sdcard /storage/sdcard0
+
+    #change permissions for mediaserver
+    chown root media /proc/clkmgr/mipi_test
+
+    #change permission for engineer mode
+    chown radio system /proc/clkmgr/pll_test
+    chown radio system /proc/clkmgr/pll_fsel
+    chmod 0664 /proc/clkmgr/pll_test
+    chmod 0664 /proc/clkmgr/pll_fsel
+    #change permission for engineer mode
+    chown radio system /proc/freqhopping/dramc
+    chown radio system /proc/freqhopping/dumpregs
+    chown radio system /proc/freqhopping/freqhopping_debug
+    chown radio system /proc/freqhopping/status
+    chown radio system /proc/freqhopping/userdef
+
+# change owner
+    chown system system /proc/bootprof
+    chmod 0664 /proc/bootprof
+    chown root system /proc/mtprof/cputime
+    chown root system /proc/mtprof/reboot_pid
+
+    chown system system /protect_f
+    chmod 0770 /protect_f
+
+    chown system system /protect_s
+    chmod 0770 /protect_s
+
+on post-fs-data
+    write /proc/bootprof "INIT:post-fs-data"
+
+    chown system system /nvcfg
+    chmod 0771 /nvcfg
+    restorecon_recursive /nvcfg
+
+    # create basic filesystem structure
+    # mkdir /data/nvram 2770 root system
+    # We chown/chmod /nvdata again so because mount is run as root + defaults
+    chown root system /nvdata
+    chmod 0771 /nvdata
+    symlink /nvdata /data/nvram
+    mkdir /nvdata/media 0771 media audio
+
+    # Set SELinux security contexts on upgrade or policy update.
+    restorecon_recursive /nvdata
+
+    chmod 0660 /data/misc/wifi/p2p_supplicant.conf
+
+    #give system access to rfkill device node
+    chmod 0660 /dev/rfkill
+
+    # create for muxd pts device node , to operate without root
+    mkdir /dev/radio 0770 radio radio
+
+    mkdir /data/drm/wv 0770 drm system
+
+# GPS
+    mkdir /data/gps_mnl 0771 gps system
+    mkdir /data/misc/gps 0770 gps system
+    mkdir /data/mpe_mnl 0771 gps system
+    chown gps system /data/mpe_mnl
+    chmod 0775 /vendor/xbin/MPED
+
+    # NFC
+    mkdir /data/nfc_socket 0771 nfc radio
+
+# -----------------------
+# Add by MTK
+    # md32 boot
+    chown root system /dev/md32
+    chmod 0440 /dev/md32
+    chown root system /sys/class/misc/md32/md32_mobile_log
+    chmod 0660 /sys/class/misc/md32/md32_mobile_log
+    write /sys/class/misc/md32/md32_boot 1
+
+    # dhcp server
+    mkdir /data/misc/dhcp 0770 dhcp wifi
+    chown dhcp system /data/misc/dhcp
+
+    # dhcpv6 server
+    mkdir /data/misc/wide-dhcpv6 0770 dhcp wifi
+    chown dhcp wifi /data/misc/wide-dhcpv6
+
+    # radvd
+    mkdir /data/misc/radvd 0770 system system
+    chmod 444 /etc/radvd/radvd.conf
+
+    # Mali 3D GPU driver
+    #insmod /vendor/lib/modules/mali.ko
+    chmod 666 /dev/mali0
+    #chown system graphics /dev/mali
+
+
+
+    # Touch Panel
+    # chmod 0664 /dev/touch
+    chown root diag /sys/module/tpd_setting/parameters/tpd_calmat
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_debounce_time
+    chown root diag /sys/module/tpd_setting/parameters/tpd_mode
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_debounce_time0
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_debounce_time1
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_spl_num
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_pressure_threshold
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_auto_time_interval
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_sample_cnt
+    chown root diag /sys/module/tpd_setting/parameters/tpd_em_asamp
+    chown root diag /sys/module/tpd_debug/parameters/tpd_em_log
+    chown root diag /sys/module/tpd_debug/parameters/tpd_em_log_to_fs
+
+    chmod 0666 /dev/pmem_multimedia
+
+    # watch dog kicker
+    write /proc/wdk "0 20 30"
+
+    # set ptmx group to non-root
+    chown root radio /dev/ptmx
+
+    # RTC
+    mkdir /data/misc/rtc 0770 system system
+
+    # M4U
+    #insmod /vendor/lib/modules/m4u.ko
+    #mknod /dev/M4U_device c 188 0
+    chmod 0444 /dev/m4u
+    #chown system media /dev/M4U_device
+
+    #set mlock limit to infinate (for m4u operation)
+    setrlimit 8 -1 -1
+
+    # CMDQ
+    chmod 0640 /dev/mtk_cmdq
+    chown system system /dev/mtk_cmdq
+
+    #OFFLOAD SERVICE
+    chmod 0640 /dev/offloadservice
+    chown media media /dev/offloadservice
+
+    # Sensor
+    chmod 0660 /dev/hwmsensor
+    chmod 0660 /dev/msensor
+    chmod 0660 /dev/gsensor
+    chmod 0660 /dev/als_ps
+    chmod 0660 /dev/gyroscope
+    chmod 0660 /dev/aal_als
+
+    chmod 0660 /sys/devices/platform/msensor/driver/cpsopmode
+    chmod 0660 /sys/devices/platform/msensor/driver/cpsreptxy
+    chmod 0660 /sys/devices/platform/msensor/driver/cpsreptz
+    chmod 0660 /sys/devices/platform/gsensor/driver/cpsopmode
+    chmod 0660 /sys/devices/platform/gsensor/driver/cpsrange
+    chmod 0660 /sys/devices/platform/gsensor/driver/cpsbandwidth
+
+    chown system system /dev/hwmsensor
+    chown system system /dev/msensor
+    chown system system /dev/gsensor
+    chown radio system /dev/als_ps
+    chown system system /dev/gyroscope
+    chown system system /dev/aal_als
+
+    chmod 0660 /sys/class/misc/m_acc_misc/accenablenodata
+    chmod 0660 /sys/class/misc/m_acc_misc/accactive
+    chmod 0660 /sys/class/misc/m_acc_misc/accdelay
+    chmod 0660 /sys/class/misc/m_acc_misc/accbatch
+    chmod 0660 /sys/class/misc/m_acc_misc/accflush
+    chown system system /sys/class/misc/m_acc_misc/accenablenodata
+    chown system system /sys/class/misc/m_acc_misc/accactive
+    chown system system /sys/class/misc/m_acc_misc/accdelay
+    chown system system /sys/class/misc/m_acc_misc/accbatch
+    chown system system /sys/class/misc/m_acc_misc/accflush
+
+    chmod 0660 /sys/class/misc/m_mag_misc/magactive
+    chmod 0660 /sys/class/misc/m_mag_misc/magdelay
+    chmod 0660 /sys/class/misc/m_mag_misc/magbatch
+    chmod 0660 /sys/class/misc/m_mag_misc/magflush
+    chmod 0660 /sys/class/misc/m_mag_misc/magoactive
+    chmod 0660 /sys/class/misc/m_mag_misc/magodelay
+    chmod 0660 /sys/class/misc/m_mag_misc/magobatch
+    chmod 0660 /sys/class/misc/m_mag_misc/magoflush
+    chown system system /sys/class/misc/m_mag_misc/magactive
+    chown system system /sys/class/misc/m_mag_misc/magdelay
+    chown system system /sys/class/misc/m_mag_misc/magbatch
+    chown system system /sys/class/misc/m_mag_misc/magflush
+    chown system system /sys/class/misc/m_mag_misc/magoactive
+    chown system system /sys/class/misc/m_mag_misc/magodelay
+    chown system system /sys/class/misc/m_mag_misc/magobatch
+    chown system system /sys/class/misc/m_mag_misc/magoflush
+    chmod 0660 /sys/class/misc/m_batch_misc/batchactive
+    chmod 0660 /sys/class/misc/m_batch_misc/batchdelay
+    chmod 0660 /sys/class/misc/m_batch_misc/batchbatch
+    chmod 0660 /sys/class/misc/m_batch_misc/batchflush
+    chown system system /sys/class/misc/m_batch_misc/batchactive
+    chown system system /sys/class/misc/m_batch_misc/batchdelay
+    chown system system /sys/class/misc/m_batch_misc/batchbatch
+    chown system system /sys/class/misc/m_batch_misc/batchflush
+
+	chmod 0660 /sys/class/misc/m_gyro_misc/gyroenablenodata
+    chmod 0660 /sys/class/misc/m_gyro_misc/gyroactive
+    chmod 0660 /sys/class/misc/m_gyro_misc/gyrodelay
+    chmod 0660 /sys/class/misc/m_gyro_misc/gyrobatch
+    chmod 0660 /sys/class/misc/m_gyro_misc/gyroflush
+    chown system system /sys/class/misc/m_gyro_misc/gyroenablenodata
+    chown system system /sys/class/misc/m_gyro_misc/gyroactive
+    chown system system /sys/class/misc/m_gyro_misc/gyrodelay
+    chown system system /sys/class/misc/m_gyro_misc/gyrobatch
+    chown system system /sys/class/misc/m_gyro_misc/gyroflush
+
+    chmod 0660 /sys/class/misc/m_alsps_misc/alsactive
+    chmod 0660 /sys/class/misc/m_alsps_misc/alsdelay
+    chmod 0660 /sys/class/misc/m_alsps_misc/alsbatch
+    chmod 0660 /sys/class/misc/m_alsps_misc/alsflush
+    chmod 0660 /sys/class/misc/m_alsps_misc/psactive
+    chmod 0660 /sys/class/misc/m_alsps_misc/psdelay
+    chmod 0660 /sys/class/misc/m_alsps_misc/psbatch
+    chmod 0660 /sys/class/misc/m_alsps_misc/psflush
+    chown system system /sys/class/misc/m_alsps_misc/alsactive
+    chown system system /sys/class/misc/m_alsps_misc/alsdelay
+    chown system system /sys/class/misc/m_alsps_misc/alsbatch
+    chown system system /sys/class/misc/m_alsps_misc/alsflush
+    chown system system /sys/class/misc/m_alsps_misc/psactive
+    chown system system /sys/class/misc/m_alsps_misc/psdelay
+    chown system system /sys/class/misc/m_alsps_misc/psbatch
+    chown system system /sys/class/misc/m_alsps_misc/psflush
+
+    chmod 0660 /sys/class/misc/m_baro_misc/baroenablenodata
+    chmod 0660 /sys/class/misc/m_baro_misc/baroactive
+    chmod 0660 /sys/class/misc/m_baro_misc/barodelay
+    chmod 0660 /sys/class/misc/m_baro_misc/barobatch
+    chmod 0660 /sys/class/misc/m_baro_misc/baroflush
+    chown system system /sys/class/misc/m_baro_misc/baroenablenodata
+    chown system system /sys/class/misc/m_baro_misc/baroactive
+    chown system system /sys/class/misc/m_baro_misc/barodelay
+    chown system system /sys/class/misc/m_baro_misc/barobatch
+    chown system system /sys/class/misc/m_baro_misc/baroflush
+
+    #Add by huangzifan. tuwenzan@wind-mobi.com add gy&gsensor at 20170512 begin 
+    chown system system /sys/bus/iio/devices/iio:device0/buffer/enable
+    chown system system /sys/bus/iio/devices/iio:device0/buffer/length
+    chown system system /sys/bus/iio/devices/iio:device0/debug_mem_read
+    chown system system /sys/bus/iio/devices/iio:device0/debug_mem_write
+    chown system system /sys/bus/iio/devices/iio:device0/debug_reg_dump
+    chown system system /sys/bus/iio/devices/iio:device0/dev
+    chown system system /sys/bus/iio/devices/iio:device0/event_eis_enable
+    chown system system /sys/bus/iio/devices/iio:device0/event_pedometer_enable
+    chown system system /sys/bus/iio/devices/iio:device0/event_pick_up_enable
+    chown system system /sys/bus/iio/devices/iio:device0/event_smd_enable
+    chown system system /sys/bus/iio/devices/iio:device0/event_tilt_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_6quat_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_6quat_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_6quat_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_6quat_wake_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_9quat_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_9quat_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_9quat_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_9quat_wake_rate    
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_scale
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_wake_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_x_dmp_bias
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_x_offset
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_x_st_calibbias
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_y_dmp_bias
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_y_offset
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_y_st_calibbias
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_z_dmp_bias
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_z_offset
+    chown system system /sys/bus/iio/devices/iio:device0/in_accel_z_st_calibbias
+    chown system system /sys/bus/iio/devices/iio:device0/in_activity_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_scale
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_wake_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_x_dmp_bias
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_x_offset
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_x_st_calibbias
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_y_dmp_bias
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_y_offset
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_y_st_calibbias
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_z_dmp_bias
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_z_offset
+    chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_z_st_calibbias
+    chown system system /sys/bus/iio/devices/iio:device0/in_calib_anglvel_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_calib_anglvel_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_calib_anglvel_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_calib_anglvel_wake_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_eis_auth
+    chown system system /sys/bus/iio/devices/iio:device0/in_eis_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_eis_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_p6quat_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_p6quat_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_p6quat_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_p6quat_wake_rate
+    chown system system /sys/bus/iio/devices/iio:device0/in_sc_auth
+    chown system system /sys/bus/iio/devices/iio:device0/in_step_counter_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_step_counter_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_step_detector_enable
+    chown system system /sys/bus/iio/devices/iio:device0/in_step_detector_wake_enable
+    chown system system /sys/bus/iio/devices/iio:device0/info_accel_matrix
+    chown system system /sys/bus/iio/devices/iio:device0/info_anglvel_matrix
+    chown system system /sys/bus/iio/devices/iio:device0/info_firmware_loaded
+    chown system system /sys/bus/iio/devices/iio:device0/info_gyro_sf
+    chown system system /sys/bus/iio/devices/iio:device0/misc_batchmode_timeout
+    chown system system /sys/bus/iio/devices/iio:device0/misc_bin_dmp_firmware
+    chown system system /sys/bus/iio/devices/iio:device0/misc_flush_batch
+    chown system system /sys/bus/iio/devices/iio:device0/misc_self_test
+    chown system system /sys/bus/iio/devices/iio:device0/name
+    chown system system /sys/bus/iio/devices/iio:device0/out_pedometer_counter
+    chown system system /sys/bus/iio/devices/iio:device0/out_pedometer_steps
+    chown system system /sys/bus/iio/devices/iio:device0/out_pedometer_time
+    chown system system /sys/bus/iio/devices/iio:device0/out_temperature
+    chown system system /sys/bus/iio/devices/iio:device0/params_pedometer_int_on
+    chown system system /sys/bus/iio/devices/iio:device0/poll_activity
+    chown system system /sys/bus/iio/devices/iio:device0/poll_pedometer
+    chown system system /sys/bus/iio/devices/iio:device0/poll_pick_up
+    chown system system /sys/bus/iio/devices/iio:device0/poll_smd
+    chown system system /sys/bus/iio/devices/iio:device0/poll_tilt
+    chown system system /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_en
+    chown system system /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_index
+    chown system system /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_type
+    chown system system /sys/bus/iio/devices/iio:device0/subsystem
+    chown system system /sys/bus/iio/devices/iio:device0/uevent
+    chown system system /dev/iio:device0
+
+    chmod 0660 /dev/iio:device0
+    chmod 0664 /sys/bus/iio/devices/iio:device0/buffer/enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/buffer/length
+    chmod 0664 /sys/bus/iio/devices/iio:device0/debug_mem_read
+    chmod 0664 /sys/bus/iio/devices/iio:device0/debug_mem_write
+    chmod 0664 /sys/bus/iio/devices/iio:device0/debug_reg_dump
+    chmod 0664 /sys/bus/iio/devices/iio:device0/dev
+    chmod 0664 /sys/bus/iio/devices/iio:device0/event_eis_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/event_pedometer_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/event_pick_up_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/event_smd_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/event_tilt_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_6quat_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_6quat_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_6quat_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_6quat_wake_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_9quat_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_9quat_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_9quat_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_9quat_wake_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_scale
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_wake_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_x_dmp_bias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_x_offset
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_x_st_calibbias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_y_dmp_bias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_y_offset
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_y_st_calibbias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_z_dmp_bias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_z_offset
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_accel_z_st_calibbias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_activity_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_scale
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_wake_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_x_dmp_bias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_x_offset
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_x_st_calibbias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_y_dmp_bias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_y_offset
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_y_st_calibbias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_z_dmp_bias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_z_offset
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_anglvel_z_st_calibbias
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_calib_anglvel_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_calib_anglvel_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_calib_anglvel_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_calib_anglvel_wake_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_eis_auth
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_eis_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_eis_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_p6quat_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_p6quat_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_p6quat_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_p6quat_wake_rate
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_sc_auth
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_step_counter_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_step_counter_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_step_detector_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/in_step_detector_wake_enable
+    chmod 0664 /sys/bus/iio/devices/iio:device0/info_accel_matrix
+    chmod 0664 /sys/bus/iio/devices/iio:device0/info_anglvel_matrix
+    chmod 0664 /sys/bus/iio/devices/iio:device0/info_firmware_loaded
+    chmod 0664 /sys/bus/iio/devices/iio:device0/info_gyro_sf
+    chmod 0664 /sys/bus/iio/devices/iio:device0/misc_batchmode_timeout
+    chmod 0664 /sys/bus/iio/devices/iio:device0/misc_bin_dmp_firmware
+    chmod 0664 /sys/bus/iio/devices/iio:device0/misc_flush_batch
+    chmod 0664 /sys/bus/iio/devices/iio:device0/misc_self_test
+    chmod 0664 /sys/bus/iio/devices/iio:device0/name
+    chmod 0664 /sys/bus/iio/devices/iio:device0/out_pedometer_counter
+    chmod 0664 /sys/bus/iio/devices/iio:device0/out_pedometer_steps
+    chmod 0664 /sys/bus/iio/devices/iio:device0/out_pedometer_time
+    chmod 0664 /sys/bus/iio/devices/iio:device0/out_temperature
+    chmod 0664 /sys/bus/iio/devices/iio:device0/params_pedometer_int_on
+    chmod 0664 /sys/bus/iio/devices/iio:device0/poll_activity
+    chmod 0664 /sys/bus/iio/devices/iio:device0/poll_pedometer
+    chmod 0664 /sys/bus/iio/devices/iio:device0/poll_pick_up
+    chmod 0664 /sys/bus/iio/devices/iio:device0/poll_smd
+    chmod 0664 /sys/bus/iio/devices/iio:device0/poll_tilt
+    chmod 0664 /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_en
+    chmod 0664 /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_index
+    chmod 0664 /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_type
+    chmod 0664 /sys/bus/iio/devices/iio:device0/subsystem
+    chmod 0664 /sys/bus/iio/devices/iio:device0/uevent
+
+   #Add by huangzifan
+    chown system system /sys/class/meizu/ps/ps_calibbias
+    chown system system /sys/class/meizu/ps/ps_calibration
+    chown system system /sys/class/meizu/ps/ps_wakeup
+    chown system system /sys/class/meizu/ps/ps_offset
+    chown system system /sys/class/meizu/ps/ps_factory_calibration
+    chown system system /sys/class/meizu/ps/ps_rw_data
+    chown system system /sys/class/meizu/ps/ps_calib_flag
+    chown system system /sys/class/meizu/ps/ps_value
+    chown system system /sys/class/meizu/hall/key_hall_state
+
+    chmod 0660 /sys/class/meizu/hall/key_hall_state
+    chmod 0660 /sys/class/meizu/ps/ps_calibbias
+    chmod 0660 /sys/class/meizu/ps/ps_calibration
+    chmod 0660 /sys/class/meizu/ps/ps_wakeup
+    chmod 0660 /sys/class/meizu/ps/ps_offset
+    chmod 0660 /sys/class/meizu/ps/ps_factory_calibration
+    chmod 0660 /sys/class/meizu/ps/ps_rw_data
+    chmod 0660 /sys/class/meizu/ps/ps_calib_flag
+    chmod 0664 /sys/class/meizu/ps/ps_value
+    #Add by huangzifan.tuwenzan@wind-mobi.com add gy&gsensor at 20170512 end
+    #Accdet
+    chown root radio /sys/devices/platform/Accdet_Driver/driver/accdet_call_state
+
+    #VideoCodec
+    #insmod /vendor/lib/modules/vcodec_kernel_driver.ko
+    mknod /dev/Vcodec c 160 0
+    chmod 0660 /dev/Vcodec
+    chown media system /dev/Vcodec
+
+    #MJC
+    #insmod /vendor/lib/modules/mjc_kernel_driver.ko
+    #mknod /dev/MJC c 168 0
+    chmod 0660 /dev/MJC
+    chown media system /dev/MJC
+
+    #kpd
+    chown radio radio /sys/devices/platform/mtk-kpd/driver/kpd_call_state
+
+    #Charging Battery
+    chown radio radio /sys/devices/platform/battery/Charging_CallState
+
+    # PMIC property
+    chown radio system /sys/devices/platform/mt-pmic/low_battery_protect_stop
+    chown radio system /sys/devices/platform/mt-pmic/low_battery_protect_ut
+
+    mkdir /data/amit/ 0770 system system
+		mkdir /data/misc/sensor 0774 system system
+    mkdir /data/misc/akmd 0770 system system
+    mkdir /data/misc/s62x 0771 compass compass
+    mkdir /data/acdapi/ 0770 system system
+    chmod 0660 /data/misc/acdapi/calib.dat
+    chmod 0660 /data/misc/acdapi/param.dat
+    chmod 0660 /data/misc/acdapi/sensors.dat
+    chown system /sys/devices/platform/msensor/driver/cpsopmode
+    chown system /sys/devices/platform/msensor/driver/cpsreptxy
+    chown system /sys/devices/platform/msensor/driver/cpsreptz
+    chown system /sys/devices/platform/gsensor/driver/cpsopmode
+    chown system /sys/devices/platform/gsensor/driver/cpsrange
+    mkdir	/data/mcube 0664 system system
+
+    chown system /sys/class/input/input1/enable
+    chown system /sys/class/input/input1/delay
+    chown system /sys/class/input/input1/wake
+    chown system /sys/class/input/input1/offsets
+    chown system /sys/class/input/input2/enable
+    chown system /sys/class/input/input2/delay
+    chown system /sys/class/input/input2/wake
+    chown system /sys/class/input/input2/offsets
+    chown system /sys/class/input/input3/enable
+    chown system /sys/class/input/input3/delay
+    chown system /sys/class/input/input3/wake
+    chown system /sys/class/input/input3/offsets
+    chown system /sys/class/input/input4/enable
+    chown system /sys/class/input/input4/delay
+    chown system /sys/class/input/input4/wake
+    chown system /sys/class/input/input4/offsets
+    chown system /sys/class/input/input5/enable
+    chown system /sys/class/input/input5/delay
+    chown system /sys/class/input/input5/wake
+    chown system /sys/class/input/input5/offsets
+    chown system /sys/class/input/input6/enable
+    chown system /sys/class/input/input6/delay
+    chown system /sys/class/input/input6/wake
+    chown system /sys/class/input/input6/offsets
+    chown system /sys/class/input/input7/enable
+    chown system /sys/class/input/input7/delay
+    chown system /sys/class/input/input7/wake
+    chown system /sys/class/input/input7/offsets
+    chown system /sys/class/input/input8/enable
+    chown system /sys/class/input/input8/delay
+    chown system /sys/class/input/input8/wake
+    chown system /sys/class/input/input8/offsets
+    chown system /sys/class/input/input9/enable
+    chown system /sys/class/input/input9/delay
+    chown system /sys/class/input/input9/wake
+    chown system /sys/class/input/input9/offsets
+    chown system /sys/class/input/input10/enable
+    chown system /sys/class/input/input10/delay
+    chown system /sys/class/input/input10/wake
+    chown system /sys/class/input/input10/offsets
+
+    #EM eint
+    chown root diag /sys/bus/platform/drivers/eint/current_eint
+
+    # Display
+    chmod 0660 /dev/graphics/fb0
+    chown system graphics /dev/graphics/fb0
+
+    chmod 0660 /dev/mtk_disp_mgr
+    chown system graphics /dev/mtk_disp_mgr
+
+    chmod 0660 /dev/mtkfb_vsync
+    chown system graphics /dev/mtkfb_vsync
+
+    chmod 0660 /dev/sw_sync
+    chown system graphics /dev/sw_sync
+
+    chmod 0660 /d/disp
+    chown system graphics /d/disp
+
+    chmod 0660 /d/dispsys
+    chown system graphics /d/dispsys
+
+    # EM baseband file
+    chown root diag /vendor/bin/baseband_regdump
+    chmod 4750 /vendor/bin/baseband_regdump
+
+    #pmu
+    chown root radio /sys/devices/platform/mt-pmic/pmic_access_bank0
+    chown root radio /sys/devices/platform/mt-pmic/pmic_access_bank1
+    chown root radio /sys/devices/platform/mt6311-user/mt6311_access
+    chown root radio /sys/devices/platform/mt-pmic/pmic_access
+    chmod 0664 /sys/devices/platform/mt-pmic/pmic_access_bank0
+    chmod 0664 /sys/devices/platform/mt-pmic/pmic_access_bank1
+    chmod 0664 /sys/devices/platform/mt6311-user/mt6311_access
+    chmod 0664 /sys/devices/platform/mt-pmic/pmic_access
+
+    # EM CPU Speed Stress
+    chown root radio /proc/cpu_ss/cpu_ss_debug_mode
+    chown root radio /proc/cpu_ss/cpu_ss_mode
+    chown root radio /proc/cpu_ss/cpu_ss_period
+    chown root radio /proc/cpu_ss/cpu_ss_period_mode
+    chmod 0664 /proc/cpu_ss/cpu_ss_debug_mode
+    chmod 0664 /proc/cpu_ss/cpu_ss_mode
+    chmod 0664 /proc/cpu_ss/cpu_ss_period
+    chmod 0664 /proc/cpu_ss/cpu_ss_period_mode
+
+    #EM eint
+    chown root diag /sys/bus/platform/drivers/eint/current_eint
+
+    # for ppp options file
+    mkdir /data/misc/ppp 0770 bluetooth net_bt
+
+    # for libipsec_ims
+    mkdir /data/misc/setkey 0770 root system
+    restorecon /data/misc/setkey
+
+    # Android SEC related device nodes
+    chmod 0660 /dev/sec
+    chown root system /dev/sec
+
+    # FM Radio device node
+    mknod /dev/fm     c 193 0;
+    chmod 0660 /dev/fm
+    chown media media /dev/fm
+
+    # device apc settings
+
+    # device info /proc interface
+    mknod /dev/devmap c 196 0;
+    chmod 0440 /dev/devmap
+    chown root system /dev/devmap
+
+    # bluetooth
+    mkdir /data/@btmtk 0770 bluetooth net_bt
+    chown bluetooth bluetooth /data/@btmtk/host_cache
+    chown bluetooth bluetooth /data/@btmtk/dev_cache
+    chown bluetooth bluetooth /dev/hid-keyboard
+    chmod 0660 /dev/hid-keyboard
+    #Use uinput's default permission
+    chown system net_bt_admin /dev/uinput
+
+    # UIBC
+    chown system media /dev/uibc
+    chmod 0660 /dev/uibc
+
+    #TV-out
+    chmod 0664 /dev/TV-out
+
+    #HDMI
+    chown media system /dev/hdmitx
+    chmod 0664 /dev/hdmitx
+
+    # JPEG
+    #chmod 0444 /dev/mtk_jpeg
+
+    # almk
+    chmod 0440 /dev/mtk_almk
+
+    # DISP
+    chmod 0444 /dev/mtk_disp
+
+    #Camera
+    chmod 0660 /dev/camera-sysram
+    chmod 0660 /dev/camera-isp
+    chmod 0660 /dev/camera-fdvt
+    chmod 0660 /dev/camera-pipemgr
+    chmod 0660 /dev/kd_camera_hw
+    chmod 0660 /dev/kd_camera_flashlight
+    chmod 0660 /dev/kd_camera_hw_bus2
+    chmod 0660 /dev/FM50AF
+    chmod 0660 /dev/CAM_CAL_DRV
+    chmod 0660 /dev/CAM_CAL_DRV1
+    chmod 0660 /dev/CAM_CAL_DRV2
+    chmod 0660 /dev/gt24c64a_ofilm
+    chmod 0660 /dev/gt24c64a_qtech
+    chmod 0660 /dev/s5k5e8_eeprom
+
+    chown system camera /dev/camera-sysram
+    chown system camera /dev/camera-isp
+    chown system camera /dev/camera-fdvt
+    chown system camera /dev/camera-pipemgr
+    chown system camera /dev/kd_camera_hw
+    chown system camera /dev/kd_camera_flashlight
+    chown system camera /dev/kd_camera_hw_bus2
+    chown system camera /dev/FM50AF
+    chown system camera /dev/CAM_CAL_DRV
+    chown system camera /dev/CAM_CAL_DRV1
+    chown system camera /dev/CAM_CAL_DRV2
+    chown system camera /dev/gt24c64a_ofilm
+    chown system camera /dev/gt24c64a_qtech
+    chown system camera /dev/s5k5e8_eeprom
+	
+    
+    #camera flashlight sysfs
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash1
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash2
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash_both
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash1
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash2
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash_both
+
+    #camera flashlight sysfs
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash1
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash2
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash3
+    chmod 0664 /sys/class/flashlightdrv/kd_camera_flashlight/flash_both
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash1
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash2
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash3
+    chown media system /sys/class/flashlightdrv/kd_camera_flashlight/flash_both
+
+    #MATV
+    chmod 0660 /dev/MATV
+    chown system media /dev/MATV
+
+    # otg_test
+    chown root radio /dev/mt_otg_test
+    chmod 0660 /dev/mt_otg_test
+
+    # MDP
+    chmod 0660 /dev/mt-mdp
+    chown system media /dev/mt-mdp
+
+    # SMI
+    chmod 0660 /dev/MTK_SMI
+    chown media media /dev/MTK_SMI
+
+# change mode for mz_rpmb_ctl
+    chown system system /dev/mz_rpmb_ctl
+    chmod 0600 /dev/mz_rpmb_ctl
+
+   #change partition permission
+
+    chmod 0640 /mtd@sec_ro
+    chown root system /mtd@sec_ro
+
+    chmod 0640 /mtd@preloader
+    chown root system /mtd@preloader
+
+    chmod 0660 /mtd@pro_info
+    chown root system /mtd@pro_info
+
+    chmod 0640 /mtd@bootimg
+    chown root system /mtd@bootimg
+
+    chmod 0640 /mtd@recovery
+    chown root system /mtd@recovery
+
+    chmod 0660 /mtd@nvram
+    chown root system /mtd@nvram
+
+    chmod 0660 /mtd@seccfg
+    chown root system /mtd@seccfg
+
+    chmod 0660 /mtd@misc
+    chown root system /mtd@misc
+
+    chmod 0664 /sys/bus/platform/drivers/mem_bw_ctrl/concurrency_scenario
+    chown media media /sys/bus/platform/drivers/mem_bw_ctrl/concurrency_scenario
+
+    #mtk_sched
+    chmod 0660 /dev/mtk_sched
+    chown system media /dev/mtk_sched
+
+    #BT SCO CVSD, for MT6572 and MT6582 CVSD codec on AP
+    chmod 0660 /dev/ebc
+    chown media media /dev/ebc
+
+    chmod 0666 /dev/uio0
+
+    #otp
+    chmod 0660 /proc/driver/otp
+    chown root system /proc/driver/otp
+
+    #sn
+    chmod 0664 /sys/class/android_usb/android0/iSerial
+    chown root system /sys/class/android_usb/android0/iSerial
+    chmod 0664 /sys/devices/platform/mt_usb/cmode
+    chown root system /sys/devices/platform/mt_usb/cmode
+
+    # secure memory
+    chown system system /proc/secmem0
+
+    # AGPS
+    mkdir /data/agps_supl 0771 gps system
+
+    chmod 0666 /dev/exm0
+
+	#Thermal
+	mkdir /data/.tp/ 0775 system system
+#Dynamic calibrate PS. hall. tuwenzan@wind-mobi.com add at 20170512
+    chown system system /sys/class/meizu/ps/ps_calibbias
+    chown system system /sys/class/meizu/ps/ps_calibration
+    chown system system /sys/class/meizu/ps/ps_offset
+    chown system system /sys/class/meizu/ps/ps_factory_calibration
+    chown system system /sys/class/meizu/ps/ps_rw_data
+    chown system system /sys/class/meizu/ps/ps_calib_flag
+    chown system system /sys/class/meizu/msensor/msensor_factory_test
+    chown system system /sys/class/meizu/hall/key_hall_state
+
+    chmod 0660 /sys/class/meizu/hall/key_hall_state
+    chmod 0660 /sys/class/meizu/ps/ps_calibbias
+    chmod 0660 /sys/class/meizu/ps/ps_calibration
+    chmod 0660 /sys/class/meizu/ps/ps_offset
+    chmod 0660 /sys/class/meizu/ps/ps_factory_calibration
+    chmod 0660 /sys/class/meizu/ps/ps_rw_data
+    chmod 0660 /sys/class/meizu/ps/ps_calib_flag
+    chmod 0660 /sys/class/meizu/msensor/msensor_factory_test
+
+    chown system system /sys/class/meizu/acc/acc_gyro_debug
+    chown system system /sys/class/meizu/acc/acc_calibration
+    chown system system /sys/class/meizu/acc/acc_x_calibbias
+    chown system system /sys/class/meizu/acc/acc_y_calibbias
+    chown system system /sys/class/meizu/acc/acc_z_calibbias
+    chown system system /sys/class/meizu/acc/acc_x_offset
+    chown system system /sys/class/meizu/acc/acc_y_offset
+    chown system system /sys/class/meizu/acc/acc_z_offset
+    chown system system /sys/class/meizu/acc/acc_gyro_factory_read_calibbias
+
+    chmod 0660 /sys/class/meizu/acc/acc_gyro_debug
+    chmod 0660 /sys/class/meizu/acc/acc_calibration
+    chmod 0660 /sys/class/meizu/acc/acc_x_calibbias
+    chmod 0660 /sys/class/meizu/acc/acc_y_calibbias
+    chmod 0660 /sys/class/meizu/acc/acc_z_calibbias
+    chmod 0660 /sys/class/meizu/acc/acc_x_offset
+    chmod 0660 /sys/class/meizu/acc/acc_y_offset
+    chmod 0660 /sys/class/meizu/acc/acc_z_offset
+    chmod 0660 /sys/class/meizu/acc/acc_gyro_factory_read_calibbias
+
+    chown system system /sys/class/meizu/acc/gyro_calibration
+    chown system system /sys/class/meizu/acc/gyro_x_calibbias
+    chown system system /sys/class/meizu/acc/gyro_y_calibbias
+    chown system system /sys/class/meizu/acc/gyro_z_calibbias
+    chown system system /sys/class/meizu/acc/gyro_x_offset
+    chown system system /sys/class/meizu/acc/gyro_y_offset
+    chown system system /sys/class/meizu/acc/gyro_z_offset
+    chown system system /sys/class/meizu/acc/gyro_z_offset
+    chown system system /sys/class/meizu/acc/acc_gyro_factory_test_calibration
+    chown system system /sys/class/meizu/acc/acc_gyro_factory_calibration
+    chmod 0660 /sys/class/meizu/acc/gyro_calibration
+    chmod 0660 /sys/class/meizu/acc/gyro_x_calibbias
+    chmod 0660 /sys/class/meizu/acc/gyro_y_calibbias
+    chmod 0660 /sys/class/meizu/acc/gyro_z_calibbias
+    chmod 0660 /sys/class/meizu/acc/gyro_x_offset
+    chmod 0660 /sys/class/meizu/acc/gyro_y_offset
+    chmod 0660 /sys/class/meizu/acc/gyro_z_offset
+    chmod 0660 /sys/class/meizu/acc/acc_gyro_factory_test_calibration
+    chmod 0660 /sys/class/meizu/acc/acc_gyro_factory_calibration
+
+    #Invensens 
+chown system system /sys/bus/iio/devices/iio:device0/accel_enable
+chown system system /sys/bus/iio/devices/iio:device0/accel_fifo_enable
+chown system system /sys/bus/iio/devices/iio:device0/accel_matrix
+chown system system /sys/bus/iio/devices/iio:device0/accel_rate
+chown system system /sys/bus/iio/devices/iio:device0/accel_wakeup_enable
+chown system system /sys/bus/iio/devices/iio:device0/batchmode_timeout
+chown system system /sys/bus/iio/devices/iio:device0/batchmode_wake_fifo_full_on
+chown system system /sys/bus/iio/devices/iio:device0/buffer/enable
+chown system system /sys/bus/iio/devices/iio:device0/buffer/length
+chown system system /sys/bus/iio/devices/iio:device0/dev
+chown system system /sys/bus/iio/devices/iio:device0/dmp_event_int_on
+chown system system /sys/bus/iio/devices/iio:device0/dmp_firmware
+chown system system /sys/bus/iio/devices/iio:device0/dmp_int_on
+chown system system /sys/bus/iio/devices/iio:device0/dmp_on
+chown system system /sys/bus/iio/devices/iio:device0/event_accel_motion
+chown system system /sys/bus/iio/devices/iio:device0/event_pedometer
+chown system system /sys/bus/iio/devices/iio:device0/event_smd
+chown system system /sys/bus/iio/devices/iio:device0/firmware_loaded
+chown system system /sys/bus/iio/devices/iio:device0/flush_batch
+chown system system /sys/bus/iio/devices/iio:device0/gyro_enable
+chown system system /sys/bus/iio/devices/iio:device0/gyro_fifo_enable
+chown system system /sys/bus/iio/devices/iio:device0/gyro_matrix
+chown system system /sys/bus/iio/devices/iio:device0/gyro_rate
+chown system system /sys/bus/iio/devices/iio:device0/gyro_wakeup_enable
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_scale
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_self_test_scale
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_x_calibbias
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_x_dmp_bias
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_x_offset
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_y_calibbias
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_y_dmp_bias
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_y_offset
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_z_calibbias
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_z_dmp_bias
+chown system system /sys/bus/iio/devices/iio:device0/in_accel_z_offset
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_scale
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_self_test_scale
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_x_calibbias
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_x_dmp_bias
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_x_offset
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_y_calibbias
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_y_dmp_bias
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_y_offset
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_z_calibbias
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_z_dmp_bias
+chown system system /sys/bus/iio/devices/iio:device0/in_anglvel_z_offset
+chown system system /sys/bus/iio/devices/iio:device0/master_enable
+chown system system /sys/bus/iio/devices/iio:device0/motion_lpa_freq
+chown system system /sys/bus/iio/devices/iio:device0/motion_lpa_on
+chown system system /sys/bus/iio/devices/iio:device0/motion_lpa_threshold
+chown system system /sys/bus/iio/devices/iio:device0/name
+chown system system /sys/bus/iio/devices/iio:device0/ped_q_on
+chown system system /sys/bus/iio/devices/iio:device0/ped_q_rate
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_counter
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_int_on
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_int_thresh
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_on
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_step_thresh
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_steps
+chown system system /sys/bus/iio/devices/iio:device0/pedometer_time
+chown system system /sys/bus/iio/devices/iio:device0/power
+chown system system /sys/bus/iio/devices/iio:device0/power_state
+chown system system /sys/bus/iio/devices/iio:device0/reg_dump
+chown system system /sys/bus/iio/devices/iio:device0/sampling_frequency
+chown system system /sys/bus/iio/devices/iio:device0/sampling_frequency_available
+chown system system /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_en
+chown system system /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_index
+chown system system /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_type
+chown system system /sys/bus/iio/devices/iio:device0/secondary_name
+chown system system /sys/bus/iio/devices/iio:device0/self_test
+chown system system /sys/bus/iio/devices/iio:device0/self_test_samples
+chown system system /sys/bus/iio/devices/iio:device0/self_test_threshold
+chown system system /sys/bus/iio/devices/iio:device0/six_axes_q_on
+chown system system /sys/bus/iio/devices/iio:device0/six_axes_q_rate
+chown system system /sys/bus/iio/devices/iio:device0/six_axes_q_value
+chown system system /sys/bus/iio/devices/iio:device0/six_axes_q_wakeup_enable
+chown system system /sys/bus/iio/devices/iio:device0/smd_delay_threshold
+chown system system /sys/bus/iio/devices/iio:device0/smd_delay_threshold2
+chown system system /sys/bus/iio/devices/iio:device0/smd_enable
+chown system system /sys/bus/iio/devices/iio:device0/smd_threshold
+chown system system /sys/bus/iio/devices/iio:device0/step_detector_on
+chown system system /sys/bus/iio/devices/iio:device0/step_indicator_on
+chown system system /sys/bus/iio/devices/iio:device0/subsystem
+chown system system /sys/bus/iio/devices/iio:device0/temperature
+chown system system /sys/bus/iio/devices/iio:device0/three_axes_q_on
+chown system system /sys/bus/iio/devices/iio:device0/three_axes_q_rate
+chown system system /sys/bus/iio/devices/iio:device0/trigger/current_trigger
+chown system system /sys/bus/iio/devices/iio:device0/uevent
+chmod 0660 /sys/bus/iio/devices/iio:device0/accel_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/accel_fifo_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/accel_matrix
+chmod 0660 /sys/bus/iio/devices/iio:device0/accel_rate
+chmod 0660 /sys/bus/iio/devices/iio:device0/accel_wakeup_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/batchmode_timeout
+chmod 0660 /sys/bus/iio/devices/iio:device0/batchmode_wake_fifo_full_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/buffer/enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/buffer/length
+chmod 0660 /sys/bus/iio/devices/iio:device0/dev
+chmod 0660 /sys/bus/iio/devices/iio:device0/dmp_event_int_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/dmp_firmware
+chmod 0660 /sys/bus/iio/devices/iio:device0/dmp_int_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/dmp_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/event_accel_motion
+chmod 0660 /sys/bus/iio/devices/iio:device0/event_pedometer
+chmod 0660 /sys/bus/iio/devices/iio:device0/event_smd
+chmod 0660 /sys/bus/iio/devices/iio:device0/firmware_loaded
+chmod 0660 /sys/bus/iio/devices/iio:device0/flush_batch
+chmod 0660 /sys/bus/iio/devices/iio:device0/gyro_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/gyro_fifo_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/gyro_matrix
+chmod 0660 /sys/bus/iio/devices/iio:device0/gyro_rate
+chmod 0660 /sys/bus/iio/devices/iio:device0/gyro_wakeup_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_scale
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_self_test_scale
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_x_calibbias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_x_dmp_bias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_x_offset
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_y_calibbias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_y_dmp_bias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_y_offset
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_z_calibbias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_z_dmp_bias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_accel_z_offset
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_scale
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_self_test_scale
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_x_calibbias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_x_dmp_bias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_x_offset
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_y_calibbias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_y_dmp_bias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_y_offset
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_z_calibbias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_z_dmp_bias
+chmod 0660 /sys/bus/iio/devices/iio:device0/in_anglvel_z_offset
+chmod 0660 /sys/bus/iio/devices/iio:device0/master_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/motion_lpa_freq
+chmod 0660 /sys/bus/iio/devices/iio:device0/motion_lpa_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/motion_lpa_threshold
+chmod 0660 /sys/bus/iio/devices/iio:device0/name
+chmod 0660 /sys/bus/iio/devices/iio:device0/ped_q_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/ped_q_rate
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_counter
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_int_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_int_thresh
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_step_thresh
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_steps
+chmod 0660 /sys/bus/iio/devices/iio:device0/pedometer_time
+chmod 0660 /sys/bus/iio/devices/iio:device0/power
+chmod 0660 /sys/bus/iio/devices/iio:device0/power_state
+chmod 0660 /sys/bus/iio/devices/iio:device0/reg_dump
+chmod 0660 /sys/bus/iio/devices/iio:device0/sampling_frequency
+chmod 0660 /sys/bus/iio/devices/iio:device0/sampling_frequency_available
+chmod 0660 /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_en
+chmod 0660 /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_index
+chmod 0660 /sys/bus/iio/devices/iio:device0/scan_elements/in_timestamp_type
+chmod 0660 /sys/bus/iio/devices/iio:device0/secondary_name
+chmod 0660 /sys/bus/iio/devices/iio:device0/self_test
+chmod 0660 /sys/bus/iio/devices/iio:device0/self_test_samples
+chmod 0660 /sys/bus/iio/devices/iio:device0/self_test_threshold
+chmod 0660 /sys/bus/iio/devices/iio:device0/six_axes_q_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/six_axes_q_rate
+chmod 0660 /sys/bus/iio/devices/iio:device0/six_axes_q_value
+chmod 0660 /sys/bus/iio/devices/iio:device0/six_axes_q_wakeup_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/smd_delay_threshold
+chmod 0660 /sys/bus/iio/devices/iio:device0/smd_delay_threshold2
+chmod 0660 /sys/bus/iio/devices/iio:device0/smd_enable
+chmod 0660 /sys/bus/iio/devices/iio:device0/smd_threshold
+chmod 0660 /sys/bus/iio/devices/iio:device0/step_detector_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/step_indicator_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/subsystem
+chmod 0660 /sys/bus/iio/devices/iio:device0/temperature
+chmod 0660 /sys/bus/iio/devices/iio:device0/three_axes_q_on
+chmod 0660 /sys/bus/iio/devices/iio:device0/three_axes_q_rate
+chmod 0660 /sys/bus/iio/devices/iio:device0/trigger/current_trigger
+chmod 0660 /sys/bus/iio/devices/iio:device0/uevent
+chown system system /dev/iio:device0
+chmod 0660 /dev/iio:device0
+#tuwenzan@wind-mobi.com add at 20170512 end
+# End of adding by MTK drivers
+# -----------------------
+
+on boot
+    write /proc/bootprof "INIT:boot"
+
+
+    write /proc/sys/vm/dirty_writeback_centisecs 300
+    chmod 0660 /sys/power/autosleep
+
+    chmod 0664 /sys/class/leds/lcd-backlight/brightness
+    #tuwenzan@wind-mobi.com add at 20170512 begin
+    # mx-led 
+    chown system system /sys/class/leds/mx-led/brightness
+    chown system system /sys/class/leds/mx-led/blink
+    chmod 0664 /sys/class/leds/mx-led/brightness
+    chmod 0664 /sys/class/leds/mx-led/blink
+    #tuwenzan@wind-mobi.com add at 20170512 end
+    chown system system /sys/devices/system/cpu/cpufreq/hotplug/cpu_num_base
+    chmod 0660 /sys/devices/system/cpu/cpufreq/hotplug/cpu_num_base
+    chown root   system /sys/kernel/debug/binder/transaction_log_enable
+    chown root   system /sys/kernel/debug/binder/perf_evalue
+
+    chown system /sys/module/mlog/parameters/do_mlog
+    chown system /sys/module/mlog/parameters/timer_intval
+
+    chown root   radio  /sys/class/leds/lcd-backlight/duty
+    chown root   radio  /sys/class/leds/lcd-backlight/div
+    chown system system /sys/class/leds/lcd-backlight/trigger
+    chown system system /sys/class/leds/button-backlight/trigger
+    chown system system /sys/class/leds/keyboard-backlight/trigger
+    chown system system /sys/class/leds/jogball-backlight/trigger
+    chown system system /sys/class/leds/red/trigger
+    chown system system /sys/class/leds/green/trigger
+    chown system system /sys/class/leds/blue/trigger
+    chown system system /sys/class/leds/mx-led/trigger
+
+    # Permission for hibernation
+    chown radio system /sys/power/tuxonice
+    chown radio system /sys/power/tuxonice/do_hibernate
+    chmod 0770 /sys/power/tuxonice
+    chmod 0220 /sys/power/tuxonice/do_hibernate
+
+
+# Smartbook Handler Framework
+    chown system system /sys/power/sb_state
+    chmod 0660 /sys/power/sb_state
+
+# HMP CPU hotplug strategy
+    chown system system /proc/hps/num_base_perf_serv
+    chmod 0660 /proc/hps/num_base_perf_serv
+    chown system system /proc/hps/num_limit_power_serv
+    chmod 0660 /proc/hps/num_limit_power_serv
+    chown system system /proc/hps/num_limit_ultra_power_saving
+    chmod 0660 /proc/hps/num_limit_ultra_power_saving
+    chown system system /proc/hps/down_threshold
+    chmod 0660 /proc/hps/down_threshold
+    chown system system /proc/hps/up_threshold
+    chmod 0660 /proc/hps/up_threshold
+
+# PPM
+    chown system system /proc/ppm/mode
+    chmod 0660 /proc/ppm/mode
+    chown system system /proc/ppm/policy/userlimit_min_cpu_freq
+    chmod 0660 /proc/ppm/policy/userlimit_min_cpu_freq
+    chown system system /proc/ppm/policy/userlimit_max_cpu_freq
+    chmod 0660 /proc/ppm/policy/userlimit_max_cpu_freq
+    chown system system /proc/ppm/policy/userlimit_min_cpu_core
+    chmod 0660 /proc/ppm/policy/userlimit_min_cpu_core
+    chown system system /proc/ppm/policy/userlimit_max_cpu_core
+    chmod 0660 /proc/ppm/policy/userlimit_max_cpu_core
+    chown system system /proc/ppm/policy/userlimit_cpu_core
+    chmod 0660 /proc/ppm/policy/userlimit_cpu_core
+    chown system system /proc/ppm/policy/userlimit_cpu_freq
+    chmod 0660 /proc/ppm/policy/userlimit_cpu_freq
+    chown system system /proc/ppm/dump_cluster_0_dvfs_table
+    chmod 0440 /proc/ppm/dump_cluster_0_dvfs_table
+    chown system system /proc/ppm/dump_cluster_1_dvfs_table
+    chmod 0440 /proc/ppm/dump_cluster_1_dvfs_table
+    chown system system /proc/ppm/root_cluster
+    chmod 0660 /proc/ppm/root_cluster
+
+# CPU freq
+    chown system system /proc/cpufreq/cpufreq_limited_by_hevc
+    chmod 0660 /proc/cpufreq/cpufreq_limited_by_hevc
+    chown system system /proc/cpufreq/cpufreq_limited_max_freq_by_user
+    chmod 0660 /proc/cpufreq/cpufreq_limited_max_freq_by_user
+
+# BW monitor
+    chown system system /proc/fliper
+    chmod 0664 /proc/fliper
+
+##Netlog tool
+   #change permissions about terminal
+    chown root radio /proc/net/vlan/config
+    chmod 0640 /proc/net/vlan/config
+    chown root radio /proc/net/ip6_tables_matches
+    chown root radio /proc/net/ip6_tables_names
+    chown root radio /proc/net/ip6_tables_targets
+    chown root radio /proc/net/arp_tables_targets
+    chown root radio /proc/net/arp_tables_matches
+    chown root radio /proc/net/arp_tables_names
+    chown root radio /proc/net/ip_tables_targets
+    chown root radio /proc/net/ip_tables_matches
+    chown root radio /proc/net/ip_tables_names
+    chown root radio /proc/net/ip_conntrack_expect
+    chown root radio /proc/net/ip_conntrack
+    chown root radio /proc/net/nf_conntrack
+    chown root radio /proc/net/nf_conntrack_expect
+    chown root radio /proc/net/netfilter/nfnetlink_log
+    chown root radio /proc/net/netfilter/nfnetlink_queue
+
+# WMT proc
+    chown shell system /proc/driver/wmt_dbg
+    chown shell system /proc/driver/wmt_aee
+
+# define device for EMCSMDLOGGER
+    chown system radio /dev/ttyGS3
+    chmod 0660 /dev/ttyGS3
+
+#Define device for ATCID
+    chmod 660 /dev/ttyGS0
+    chown system /dev/ttyGS0
+    chmod 660 /dev/ttyGS1
+    chown system /dev/ttyGS1
+
+
+#For Debug system boost  Zhiyong.Zeng@BSP-QA
+    chown system system sys/kernel/debug/measure/boot
+    chmod 0660 sys/kernel/debug/measure/boot
+
+    # FLYME:wangxiaoyong@SHELL.SUB_DISPLAY.Feature {@
+# Permissions for sub display backlight
+    chmod 0660 /sys/class/leds/sub-backlight/brightness
+    chown system system /sys/class/leds/sub-backlight/brightness
+
+#Permissions for gesture
+    chown system system /sys/class/meizu/tp/gesture_control
+    chown system system /sys/class/meizu/tp/gesture_data
+    chmod 0660 /sys/class/meizu/tp/gesture_control
+    chmod 0660 /sys/class/meizu/tp/gesture_data
+
+    chown system system /sys/class/meizu/sub_tp/gesture_control
+    chown system system /sys/class/meizu/sub_tp/gesture_data
+    chmod 0660 /sys/class/meizu/sub_tp/gesture_control
+    chmod 0660 /sys/class/meizu/sub_tp/gesture_data
+    #hengyongyan@wind-mobi.com 2017.6.19 add start
+    chown system system /sys/devices/mx_tsp/gesture_control
+    chown system system /sys/devices/mx_tsp/gesture_data
+    chmod 0660 /sys/devices/mx_tsp/gesture_control
+    chmod 0660 /sys/devices/mx_tsp/gesture_data
+    #hengyongyan@wind-mobi.com 2017.6.19 end
+# @}
+
+on property:ro.board.platform=mt6753
+    chown system system /sys/devices/system/cpu/cpufreq/interactive/hispeed_freq
+    chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/hispeed_freq
+    write /sys/devices/system/cpu/cpufreq/interactive/hispeed_freq 1300000
+
+on property:vold.decrypt=trigger_reset_main
+    write /proc/bootprof "INIT:vold.decrypt=trigger_reset_main"
+    start stop_modem
+    setprop sys.boot_completed 0
+    setprop dev.bootcomplete 0
+
+on property:vold.decrypt=trigger_post_fs_data
+    write /proc/bootprof "INIT:vold.decrypt=trigger_post_fs_data"
+
+on property:vold.decrypt=trigger_restart_min_framework
+    write /proc/bootprof "INIT:vold.decrypt=trigger_restart_min_framework"
+    setprop service.nvram_init 0
+    start nvram_daemon
+    start sysenv_daemon
+    start start_modem
+    start msensord
+    start permission_check
+    start stp_dump
+
+on property:vold.decrypt=trigger_restart_framework
+    write /proc/bootprof "INIT:vold.decrypt=trigger_restart_framework"
+    setprop service.nvram_init 0
+    start nvram_daemon
+    start sysenv_daemon
+    start start_modem
+    start msensord
+    start permission_check
+
+on property:vold.decrypt=trigger_shutdown_framework
+    write /proc/bootprof "INIT:vold.decrypt=trigger_shutdown_framework"
+    start stop_modem
+    start swapoff_action
+    stop stp_dump
+    setprop sys.boot_completed 0
+    setprop dev.bootcomplete 0
+
+service stop_modem /vendor/bin/md_ctrl 0
+    class main
+    disabled
+    oneshot
+
+service start_modem /vendor/bin/md_ctrl 1
+    class main
+    disabled
+    oneshot
+# Define TCP buffer sizes for various networks
+#   ReadMin, ReadInitial, ReadMax, WriteMin, WriteInitial, WriteMax,
+    setprop net.tcp.buffersize.default 4096,87380,524288,4096,16384,524288
+    setprop net.tcp.buffersize.wifi    524288,1048576,2097152,262144,524288,1048576
+    setprop net.tcp.buffersize.lte     524288,1048576,2097152,262144,524288,1048576
+    setprop net.tcp.buffersize.umts    4094,87380,524288,4096,16384,524288
+    setprop net.tcp.buffersize.hspa    4094,87380,524288,4096,16384,524288
+    setprop net.tcp.buffersize.hsupa   4094,87380,524288,4096,16384,524288
+    setprop net.tcp.buffersize.hsdpa   4094,87380,524288,4096,16384,524288
+    setprop net.tcp.buffersize.hspap   4094,87380,1220608,4096,16384,1220608
+    setprop net.tcp.buffersize.edge    4093,26280,35040,4096,16384,35040
+    setprop net.tcp.buffersize.gprs    4092,8760,11680,4096,8760,11680
+
+    setprop persist.sys.strictmode.disable 1
+
+## mtk printk uart controller
+on property:persist.uartconsole.enable=1
+    write /proc/mtprintk 1
+
+# Update the second boot logo
+service bootlogoupdater /vendor/bin/boot_logo_updater
+    class core
+    oneshot
+
+service mobile_log_d /vendor/bin/mobile_log_d
+    class main
+
+service mmedialogstart /vendor/bin/mobile_log_d --ftrace mmedia
+    oneshot
+    disabled
+
+service bsplogstart /vendor/bin/mobile_log_d --ftrace bsp
+    oneshot
+    disabled
+
+service trace_buf_off /vendor/bin/mobile_log_d --ftrace off
+    oneshot
+    disabled
+
+# ftrace log buffer control
+on property:ftrace.buffer.log=mmedia
+    start mmedialogstart
+
+on property:ftrace.buffer.log=bsp
+    start bsplogstart
+
+on property:ftrace.buffer.log=off
+    start trace_buf_off
+
+# MTK PR_DEBUG SWITCH
+on property:debug.MB.prdebug=1
+    write /sys/kernel/debug/dynamic_debug/control "file *mediatek* +p"
+    write /sys/kernel/debug/dynamic_debug/control "file *gpu* -p"
+on property:debug.MB.prdebug=0
+    write /sys/kernel/debug/dynamic_debug/control "file *mediatek* -p"
+
+service met_log_d /vendor/bin/met_log_d
+    class main
+
+# bugreport is triggered by holding down volume down, volume up and power
+service bugreport /system/bin/dumpstate -d -p -B \
+        -o /data/user_de/0/com.android.shell/files/bugreports/bugreport
+    class main
+    disabled
+    oneshot
+    keycodes 114 115 116
+
+# start ged_srv
+on property:sys.boot_completed=1
+    start ged_srv
+
+on property:sys.boot_completed=1
+    # restore perf. parameters
+    write /proc/ppm/policy/userlimit_min_cpu_freq "1 -1"
+    write /proc/ppm/policy/userlimit_min_cpu_core "1 -1"
+
+service ged_srv /vendor/bin/ged_srv
+    class core
+    user system
+    group system readproc
+    disabled
+
+service netdiag /vendor/bin/netdiag
+    class main
+    socket netdiag stream 0664 root inet
+
+
+service nvram_daemon /vendor/bin/nvram_daemon
+    class main
+    user root
+    group system
+    oneshot
+
+service sysenv_daemon /vendor/bin/sysenv_daemon
+    class main
+    user system
+    group system
+    oneshot
+
+service atci_service /vendor/bin/atci_service
+    class core
+    socket atci-service stream 660 radio system
+    socket atci-serv-fw stream 660 radio system
+    user root
+    disabled
+    group radio system
+
+service atcid-daemon-u /vendor/bin/atcid
+    class main
+    socket adb_atci_socket stream 660 radio system
+    user system
+    group radio system media
+    disabled
+    oneshot
+
+service atcid-daemon-e /vendor/bin/atcid
+    class core
+    socket adb_atci_socket stream 660 radio system
+    user root
+    group radio system
+    disabled
+    oneshot
+
+on property:ro.build.type=eng
+start atci_service
+start atcid-daemon-e
+
+on property:persist.service.atci.autostart=1
+start atci_service
+start atcid-daemon-u
+
+service audio-daemon /vendor/bin/audiocmdservice_atci
+    class main
+    socket atci-audio stream 660 root system
+    user root
+    disabled
+    oneshot
+
+service md_minilog_util /vendor/bin/md_minilog_util
+    user root
+    disabled
+    oneshot
+
+service pq /vendor/bin/pq
+    class main
+    user system
+    group system graphics
+
+service aal /vendor/bin/aal
+    class main
+    user system
+    group system graphics
+
+# FOTA upgrade
+service rbfota /vendor/bin/fota1
+    class main
+    disabled
+    oneshot
+
+
+service dhcpcd_bt-pan /system/bin/dhcpcd -BK -dd
+    class main
+    user root
+    group net_admin net_raw
+    disabled
+    oneshot
+
+service dhcpcd_wlan0 /system/bin/dhcpcd -BK -dd
+    class main
+    user root
+    group net_admin net_raw
+    disabled
+    oneshot
+
+service dhcpcd_p2p /system/bin/dhcpcd -BK -dd
+    class main
+    user root
+    group net_admin net_raw
+    disabled
+    oneshot
+
+service iprenew_wlan0 /system/bin/dhcpcd -n
+    class main
+    user dhcp
+    group net_admin net_raw
+    disabled
+    oneshot
+
+service iprenew_p2p /system/bin/dhcpcd -n
+    class main
+    user dhcp
+    group net_admin net_raw
+    disabled
+    oneshot
+
+service dhcp_inform /system/bin/dhcpcd -s -BK -A
+    class main
+    user root
+    group system radio dhcp net_admin net_raw
+    disabled
+    oneshot
+
+service dhcpv6_inform /vendor/bin/dhcp6c -c "/etc/wide-dhcpv6/dhcp6cSIP.conf" -Dfi
+    class main
+    user root
+    group system radio dhcp net_admin net_raw
+    disabled
+    oneshot
+
+service dhcp6cDNS_wlan0 /vendor/bin/dhcp6c -c "/etc/wide-dhcpv6/dhcp6cDNS.conf" -Df wlan0
+    disabled
+    oneshot
+
+service dhcp6c_wlan0 /vendor/bin/dhcp6c -c "/etc/wide-dhcpv6/dhcp6c.conf" -Df wlan0
+    disabled
+    oneshot
+
+on property:service.dhcp6c_wlan0.enable=0
+    stop dhcp6c_wlan0
+
+on property:service.dhcp6c_wlan0.enable=1
+    start dhcp6c_wlan0
+
+service dhcp6c_PD /vendor/bin/dhcp6c -c "/etc/wide-dhcpv6/dhcp6cPD.conf" -Df
+    disabled
+    oneshot
+
+service pppoe_wlan0 /vendor/bin/launchpppoe
+    user root
+    group radio cache inet misc
+    disabled
+    oneshot
+
+on property:service.pppoe_wlan0.enable=0
+    stop pppoe_wlan0
+
+on property:service.pppoe_wlan0.enable=1
+    start pppoe_wlan0
+# write proc for test sim
+    on property:gsm.sim.ril.testsim=0
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 0
+    write /proc/sys/net/ipv4/tcp_rto_min 200
+    write /proc/sys/net/ipv4/tcp_early_retrans 3
+    on property:gsm.sim.ril.testsim=1
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 1
+    write /proc/sys/net/ipv4/tcp_rto_min 400
+    write /proc/sys/net/ipv4/tcp_early_retrans 0
+    on property:gsm.sim.ril.testsim.2=0
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 0
+    write /proc/sys/net/ipv4/tcp_rto_min 200
+    write /proc/sys/net/ipv4/tcp_early_retrans 3
+    on property:gsm.sim.ril.testsim.2=1
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 1
+    write /proc/sys/net/ipv4/tcp_rto_min 400
+    write /proc/sys/net/ipv4/tcp_early_retrans 0
+    on property:gsm.sim.ril.testsim.3=0
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 0
+    write /proc/sys/net/ipv4/tcp_rto_min 200
+    write /proc/sys/net/ipv4/tcp_early_retrans 3
+    on property:gsm.sim.ril.testsim.3=1
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 1
+    write /proc/sys/net/ipv4/tcp_rto_min 400
+    write /proc/sys/net/ipv4/tcp_early_retrans 0
+    on property:gsm.sim.ril.testsim.4=0
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 0
+    write /proc/sys/net/ipv4/tcp_rto_min 200
+    write /proc/sys/net/ipv4/tcp_early_retrans 3
+    on property:gsm.sim.ril.testsim.4=1
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_no_window_check 1
+    write /proc/sys/net/ipv4/tcp_rto_min 400
+    write /proc/sys/net/ipv4/tcp_early_retrans 0
+
+service DMAgent /vendor/bin/dm_agent_binder
+    class main
+    user root
+    group root cache
+
+service PPLAgent /vendor/bin/ppl_agent
+    class main
+    user root
+    group system cache
+
+service vtservice /vendor/bin/vtservice
+    class main
+    socket soc_vt_tcv dgram 660 radio system
+    socket soc_vt_stk dgram 660 radio system
+    socket soc_vt_svc dgram 660 radio system
+    socket volte_vt stream 660 root system
+    user media
+    group system camera graphics inet net_admin net_raw media sdcard_rw radio sdcard_r media_rw
+    ioprio rt 4
+
+service mediacodec /system/bin/mediacodec
+    class main
+    user mediacodec
+    group media system audio camera inet net_bt net_bt_admin net_bw_acct drmrpc mediadrm sdcard_r media_rw
+    ioprio rt 4
+
+service cmmb /system/bin/cmmbsp
+    class main
+    user root
+    group system audio camera graphics inet net_bt net_bt_admin net_bw_acct media
+    ioprio rt 4
+
+service enableswap /system/bin/sh /enableswap.sh
+    class late_start
+    oneshot
+    seclabel u:r:enableswap:s0
+
+service swapoff_action /system/bin/sh /disableswap.sh
+    class main
+    disabled
+    oneshot
+
+service dbus /system/bin/dbus-daemon --system --nofork
+    class main
+    socket dbus stream 660 bluetooth bluetooth
+    user bluetooth
+    group bluetooth net_bt_admin
+
+service bluetoothd /system/bin/bluetoothd -n
+    class main
+    socket bluetooth stream 660 bluetooth bluetooth
+    socket dbus_bluetooth stream 660 bluetooth bluetooth
+    # init.rc does not yet support applying capabilities, so run as root and
+    # let bluetoothd drop uid to bluetooth with the right linux capabilities
+    group bluetooth net_bt_admin misc
+    disabled
+
+#service dpfd /vendor/bin/dpfd
+#	user root
+#	group system media
+
+#
+#  External Modme control related services
+#
+
+#
+#  Modem related services (Begin)
+#
+service pppd_gprs /system/bin/pppd_dt /dev/ttyACM0 debug noauth refuse-eap usepeerdns nodetach
+    user root
+    group radio cache inet misc
+    disabled
+    oneshot
+
+##Add by T.Zh for ppp daemon
+#service pppd /system/bin/pppd file /data/misc/ppp/ppp_options
+#    user root
+#    disabled
+#    oneshot
+#
+##
+#
+#  Modem related services (End)
+#
+
+#service agpsdcainit /system/bin/agpscacertinit
+#    class main
+#    oneshot
+
+service agpsd /vendor/bin/mtk_agpsd
+    class main
+    socket agpsd stream 660 gps system
+    socket agpsd2 stream 660 gps inet
+    socket agpsd3 stream 660 gps inet
+    user gps
+    group gps radio inet sdcard_r sdcard_rw misc system
+
+service slpd /vendor/bin/slpd
+    class main
+    user gps
+    group gps inet
+
+service ipod /vendor/bin/ipod
+    user root
+    group root
+    disabled
+
+service extmdlogger /vendor/bin/extmdlogger
+    class main
+    user shell
+    group shell system radio sdcard_rw inet sdcard_r media_rw
+
+service GoogleOtaAgent /vendor/bin/GoogleOtaBinder
+    class main
+    user root
+    group root
+
+service mdlogger /vendor/bin/mdlogger
+    class main
+    user shell
+    group shell system radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+
+service dualmdlogger /vendor/bin/dualmdlogger
+    class main
+    user shell
+    group shell system radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+
+service emdlogger1 /vendor/bin/emdlogger1
+    class main
+    user shell
+    group system shell radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+
+service emdlogger2 /vendor/bin/emdlogger2
+    class main
+    user shell
+    group system shell radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+service emdlogger3 /vendor/bin/emdlogger3
+    class main
+    user shell
+    group system shell radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+service emdlogger5 /vendor/bin/emdlogger5
+    class main
+    user shell
+    group system shell radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+
+service emdlogger6 /vendor/bin/emdlogger6
+    class main
+    user shell
+    group system shell radio sdcard_rw inet sdcard_r media_rw
+    disabled
+    oneshot
+
+service md_monitor /vendor/bin/md_monitor
+    class main
+    user system
+    group system radio sdcard_rw inet sdcard_r media_rw
+
+#on property:ro.mtk_modem_monitor_support=1
+#start md_monitor
+
+#
+#sensor service (begin)
+#
+
+service msensord /vendor/bin/msensord
+    class main
+    oneshot
+
+service s62xd /vendor/bin/s62xd
+    disabled
+    user compass
+    group system
+    class main
+service ami304d /vendor/bin/ami304d
+    user system
+    group system
+    disabled
+    class main
+
+service memsicd /vendor/bin/memsicd
+     disabled
+    user system
+    group system
+    class main
+
+service memsicd3416x /vendor/bin/memsicd3416x
+     disabled
+	 user system
+    group system
+    class main
+service akmd8975 /vendor/bin/akmd8975
+    disabled
+    user system
+    group system
+    class main
+
+service akmd8963 /vendor/bin/akmd8963
+    disabled
+    user system
+    group system
+    class main
+
+service akmd09911 /vendor/bin/akmd09911
+    disabled
+    user system
+    group system
+    class main
+#tuwenzan@wind-mobi.com add msesnor damon at 20170512 begin
+service st480 /system/bin/st480
+    disabled
+    user system
+    group system
+    class main
+#tuwenzan@wind-mobi.com add msesnor damon at 20170512 end
+service bmm050d /vendor/bin/bmm050d
+    disabled
+    user system
+    group system
+    class main
+
+service bmm056d /vendor/bin/bmm056d
+    disabled
+    user system
+    group system
+    class main
+service mc6420d /vendor/bin/mc6420d
+    disabled
+    user system
+    group system
+    class main
+service qmc5983d /vendor/bin/qmc5983d
+     disabled
+	 user system
+    group system
+    class main
+
+service orientationd /vendor/bin/orientationd
+    disabled
+    user system
+    group system input
+    class main
+service AcdApiDaemon /vendor/bin/AcdApiDaemon
+    disabled
+    user system
+    group system
+    class main
+
+service geomagneticd /vendor/bin/geomagneticd
+    disabled
+    user system
+    group system input
+    class main
+
+service mpud6050 /vendor/bin/mpud6050
+    oneshot
+    user system
+    group system
+
+service mc64xxd /vendor/bin/mc64xxd
+    disabled
+    user system
+    group system
+    class main
+#
+#sensor service (end)
+#
+
+#
+#emsvr service (start)
+#
+on property:ro.build.type=eng
+    start emsvr
+
+on property:ro.build.type=user
+    start emsvr_user
+
+on property:ro.build.type=userdebug
+    start emsvr_user
+
+service emsvr_user /vendor/bin/em_svr
+    disabled
+    user system
+    group system radio diag net_bt_stack
+
+service emsvr /vendor/bin/em_svr
+    disabled
+    user root
+    group net_bt_stack
+
+#
+#emsvr service (end)
+#
+
+service shutdown /system/bin/shutdown
+    user root
+    group root
+    disabled
+
+service NvRAMAgent /vendor/bin/nvram_agent_binder
+    class main
+    user system
+    group system
+
+service thermalloadalgod /vendor/bin/thermalloadalgod
+    class main
+    user system
+    group system
+
+
+service thermal_manager /vendor/bin/thermal_manager
+    class main
+    user root
+	group system
+    oneshot
+
+service thermal /vendor/bin/thermal
+    class main
+    user system
+    group system
+
+service thermald /vendor/bin/thermald
+    class main
+    user system
+    group system
+
+service fuelgauged /vendor/bin/fuelgauged
+    class main
+    user system
+    group system
+
+service sn /vendor/bin/sn
+    class late_start
+    user system
+    group system sdcard_rw
+    oneshot
+
+#add for power-off alarm
+service poad /vendor/bin/poad
+    class main
+    user system
+    group system
+    oneshot
+
+#monitor battery status
+service batterywarning /vendor/bin/batterywarning
+    class main
+    user shell
+    group shell
+
+
+#service BGW /vendor/xbin/BGW
+#	user system
+#	group gps system radio
+#	class main
+service MtkCodecService /vendor/bin/MtkCodecService
+    class main
+    user system
+    group audio media sdcard_r
+
+# GuiExt Server init
+service guiext-server /vendor/bin/guiext-server
+    class main
+    user system
+    group system graphics
+
+# OperaMax Service
+service OperaMaxSystem /system/bin/OperaMaxSystem
+    socket tunman stream 0666 system system
+    class main
+    disabled
+
+on property:persist.service.operamax=1
+    start OperaMaxSystem
+
+on property:persist.service.operamax=0
+    stop OperaMaxSystem
+
+service kpoc_charger /vendor/bin/kpoc_charger
+    class charger
+
+###########add for 3Gdongle
+
+on boot
+#
+# change the right of ip-up ip-down scripts(begin)
+#
+chmod 777 /etc/ppp/ip-up
+chmod 777 /etc/ppp/ip-down
+#
+# change the right of ip-up ip-down scripts(end)
+#
+
+#
+# change the right of ip-up-ppp0 ip-down-ppp0 scripts(begin)
+#
+chmod 777 /etc/ppp/ip-up-ppp0
+chmod 777 /etc/ppp/ip-down-ppp0
+#
+# change the right of ip-up ip-down scripts(end)
+#
+
+#set the property of persiste.radio.reset_on_switch
+setprop persist.radio.reset_on_switch false
+#end
+
+#set the property of rild.mark_switchuser
+setprop rild.mark_switchuser 0
+#end
+
+chmod 0644 /vendor/lib/libzteevdo-ril.so
+chomd 0644 /vendor/lib/zterilPara
+chown root /system/bin/pppd
+chmod 4755 /system/bin/pppd
+chown root /vendor/bin/chat
+chmod 4755 /vendor/bin/chat
+
+#
+#ril-daemon (begin)
+#
+service ril-3gddaemon /vendor/bin/rild_dongle
+    class main
+    socket rild-dongle stream 660 root radio
+    socket rild-dongle-debug stream 660 radio radio
+    user root
+    group radio cache inet misc audio log
+    disabled
+
+#
+#ril-daemon (end)
+#
+
+#
+#usbdongled(begin)
+#
+service usbdongled /vendor/bin/dongled
+    class main
+	user root
+	group radio cache inet misc
+	enabled
+
+
+#
+#usbdongled(end)
+#
+
+#
+# add the service for call pppd(begin)
+#
+service zpppd_gprs /vendor/bin/init.gprs-pppd
+    user root
+	group radio cache inet misc
+	disabled
+	oneshot
+#
+# add the service for call pppd(end)
+#
+
+# Program binary service
+service program_binary /vendor/bin/program_binary_service
+    class late_start
+    user system
+    group graphics
+    oneshot
+
+
+# MBIMD Service
+service mbimd /vendor/bin/mbimd debug
+    disabled
+    oneshot
+
+on property:service.mbim.enable=0
+    stop mbimd
+
+on property:service.mbim.enable=1
+    start mbimd
+
+# uniservice pack native service
+service usp_service /vendor/bin/usp_service
+    user system
+    group root system radio
+    disabled
+    oneshot
+
+on property:persist.mtk_usp_native_start=1
+    start usp_service
+    stop zygote_secondary
+    stop zygote
+    setprop persist.mtk_usp_native_start 0
+
+on property:persist.mtk_usp_native_start=0
+    start zygote
+    start zygote_secondary
+
+# Thermal Indicator Service
+
+service ThermalIndicator /vendor/bin/thermalindicator
+	class core
+	disabled
+
+on property:debug.mtk.thermalindicator=0
+	stop ThermalIndicator
+
+on property:debug.mtk.thermalindicator=1
+	start ThermalIndicator
+on property:sys.boot_completed=1	
+chmod 0666  /dev/block/mmcblk0p9	
+chown root system   /dev/block/mmcblk0p9	
+exec /system/bin/rstinfo check
+
+###### add for recovery_service begin ######
+on boot
+    setprop recovery.service.support true
+
+# recovery service
+service recovery_service /system/bin/recovery_service
+    class main
+    user root
+    disabled
+    oneshot
+
+on property:recovery.service.control=start
+    start recovery_service
+
+on property:recovery.service.control=stop
+    stop recovery_service
+###### add for recovery_service end ######
+
+
+###### add for recovery_service begin ######
+on boot
+    setprop recovery.service.support true
+
+# recovery service
+service recovery_service /system/bin/recovery_service
+    class main
+    user root
+    disabled
+    oneshot
+
+on property:recovery.service.control=start
+    start recovery_service
+
+on property:recovery.service.control=stop
+    stop recovery_service
+###### add for recovery_service end ######
+service fingerprintd /system/bin/fingerprintd
+    class late_start
+    user system
+    group system
